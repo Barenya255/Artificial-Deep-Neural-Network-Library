@@ -2,7 +2,8 @@ import numpy as np
 import random
 from matplotlib import pyplot as plt
 from keras.datasets import fashion_mnist
-from tqdm import tqdm_notebook as tqdm
+from keras.datasets import mnist
+from tqdm import tqdm as tqdm
 import math
 import cv2 as cv
 import wandb
@@ -10,20 +11,20 @@ import argparse
 
 
 parser = argparse.ArgumentParser(description='Training the model as per arguments passed')
-parser.add_argument('-wp', '--wandb_project', type = str, default = "cs6910-cs22m028FinalSet")
+parser.add_argument('-wp', '--wandb_project', type = str, default = "cs6910.cs22m028")
 parser.add_argument('-we', '--wandb_entity', type = str, default = "")
 parser.add_argument('-d', '--dataset', type = str, help = "dataset to be operated on", default = "fashion_mnist")
 parser.add_argument('-e', '--epochs',type = int, default = 1)
 parser.add_argument('-b', '--batch_size',type = int, default = 4)
 parser.add_argument('-l', '--loss', type = str, default = "cross_entropy")
 parser.add_argument('-o', '--optimizer', type = str, default = "sgd")
-parser.add_argument('-lr', '--learning_rate', type = int, default = 0.1)
-parser.add_argument('-m', '--momentum', type = int, default = 0.5)
-parser.add_argument('-beta1', '--beta1', type = int, default = 0.5)
-parser.add_argument('-beta2', '--beta2', type = int, default = 0.5)
-parser.add_argument('-beta', '--beta', type = int, default = 0.5)
-parser.add_argument('-eps', '--epsilon', type = int, default = 0.0000001)
-parser.add_argument('-w_d', '--weight_decay', type = int, default = 0)
+parser.add_argument('-lr', '--learning_rate', type = float, default = 0.1)
+parser.add_argument('-m', '--momentum', type = float, default = 0.5)
+parser.add_argument('-beta1', '--beta1', type = float, default = 0.5)
+parser.add_argument('-beta2', '--beta2', type = float, default = 0.5)
+parser.add_argument('-beta', '--beta', type = float, default = 0.5)
+parser.add_argument('-eps', '--epsilon', type = float, default = 0.0000001)
+parser.add_argument('-w_d', '--weight_decay', type = float, default = 0)
 parser.add_argument('-w_i', '--weight_init', type = str, default = "random")
 parser.add_argument('-nhl', '--num_layers', type = int, default = 1)
 parser.add_argument('-sz', '--hidden_size', type = int, default = 1)
@@ -38,18 +39,36 @@ def main():
     wandb.run.name = "config_"+ str(args.optimizer) + "_" + str(args.batch_size) + "_"+ str(args.learning_rate) + "_" + str(args.activation) + "_"+str(args.weight_decay) + "_" + str(args.epochs) + "_" + str(args.num_layers)+str(args.weight_init)
 
     neuralNet = FFNet(0, len(trainx[0]), 10)
+    print("**************** Initializing neural Network ************************************************")
+    print(" configuration is as follows : " + str(args.optimizer) + " " + str(args.batch_size) + " "+ str(args.learning_rate) + " " + str(args.activation) + " "+str(args.weight_decay) + " " + str(args.epochs) + " " + str(args.num_layers) + " " + str(args.weight_init))
     for layer in range(args.num_layers):
         neuralNet.addHiddenLayer(args.hidden_size, args.weight_init)
     neuralNet.addOutputLayer(10, args.weight_init)
     neuralNet.solidify()
+    print("********************** Successful creationg of neural Network *********************************")
+    print()
+    print()
+    print("********************************* Starting training ********************************************")
     weights, biases = neuralNet.fit(args.optimizer,args.batch_size, args.learning_rate, args.activation, trainx, train_y, args.weight_decay, args.epochs, args.loss)
+    print("********************************* Successful training ************************************************")
+    print()
+    print()
 
 
 
 
 class PreProc:
     def __init__(self):
-        (self.trainx,self.trainy),(self.testx, self.testy) = fashion_mnist.load_data()
+        if args.dataset == "mnist":
+            print("#################################################################################################################")
+            print("###########################################loaded MNIST dataset##################################################")
+            print("#################################################################################################################")
+            (self.trainx,self.trainy),(self.testx, self.testy) = mnist.load_data()
+        else:
+            print("#################################################################################################################")
+            print("###########################################loaded Fashion MNIST dataset##########################################")
+            print("#################################################################################################################")
+            (self.trainx,self.trainy),(self.testx, self.testy) = fashion_mnist.load_data()
         
     def visualize(self,n):
         for i in range(n):
@@ -101,8 +120,8 @@ class Functions:
     
     @staticmethod
     def mse(pred, true):
-        return pred*true
-    
+        return (np.linalg.norm(pred - true)**2)
+        
     @staticmethod
     def softmax(input):
         input = np.clip(input, -100,100)
@@ -268,7 +287,6 @@ class Algorithms:
             validationLoss.append((Algorithms.uniLoss(weights, biases, activate, output, valTest_x, valTest_y, lossFunc)))
             trainAccuracy.append(Algorithms.evaluateNetwork(weights, biases, activate, output, testx, test_y))
             wandb.log({"Train accuracy": trainAccuracy[-1], "Validation Accuracy":validation[-1], "Validation Loss":validationLoss[-1], "loss":loss[-1]})
-            print(validationLoss)
             
         return weights, biases
 
@@ -349,7 +367,6 @@ class Algorithms:
             validationLoss.append((Algorithms.uniLoss(weights, biases, activate, output, valTest_x, valTest_y, lossFunc)))
             trainAccuracy.append(Algorithms.evaluateNetwork(weights, biases, activate, output, trainx, train_y))
             wandb.log({"Train accuracy": trainAccuracy[-1], "Validation Accuracy":validation[-1], "Validation Loss":validationLoss[-1], "loss":loss[-1]})
-            print(validationLoss[-1])
                 
             if validation[-1] <= prev_val+1e-2:
                 patience -= 1
@@ -458,7 +475,6 @@ class Algorithms:
             validationLoss.append((Algorithms.uniLoss(weights, biases, activate, output, valTest_x, valTest_y, lossFunc)))
             trainAccuracy.append(Algorithms.evaluateNetwork(weights, biases, activate, output, trainx, train_y))
             wandb.log({"Train accuracy": trainAccuracy[-1], "Validation Accuracy":validation[-1], "Validation Loss":validationLoss[-1]})
-            print(validationLoss[-1])
             
             if patience <= 0:
                 return prev_weights, prev_biases
@@ -517,8 +533,6 @@ class Algorithms:
             validationLoss.append((Algorithms.uniLoss(weights, biases, activate, output, valTest_x, valTest_y, lossFunc)))
             trainAccuracy.append(Algorithms.evaluateNetwork(weights, biases, activate, output, trainx, train_y))
             wandb.log({"Train accuracy": trainAccuracy[-1], "Validation Accuracy":validation[-1], "Validation Loss":validationLoss[-1]})
-            print(trainAccuracy[-1])
-            
         return weights, biases
     
     @staticmethod
@@ -579,7 +593,6 @@ class Algorithms:
             validationLoss.append((Algorithms.uniLoss(weights, biases, activate, output, valTest_x, valTest_y, lossFunc)))
             trainAccuracy.append(Algorithms.evaluateNetwork(weights, biases, activate, output, trainx, train_y))
             wandb.log({"Train accuracy": trainAccuracy[-1], "Validation Accuracy":validation[-1], "Validation Loss":validationLoss[-1]})
-            print(trainAccuracy[-1])
         return weights, biases
 
     @staticmethod
@@ -626,7 +639,6 @@ class Algorithms:
             validationLoss.append((Algorithms.uniLoss(weights, biases, activate, output, valTest_x, valTest_y, lossFunc)))
             trainAccuracy.append(Algorithms.evaluateNetwork(weights, biases, activate, output, trainx, train_y))
             wandb.log({"Train accuracy": trainAccuracy[-1], "Validation Accuracy":validation[-1], "Validation Loss":validationLoss[-1]})
-            print(trainAccuracy[-1])
         return weights, biases
     
     @staticmethod
@@ -770,7 +782,11 @@ if __name__ == '__main__':
     trainx = train_x/255.0
     testx = test_x/255.0
     train_y, test_y = data.getLabels()
+    
+    print("************************************************************************************************************************")
+    print("******************************** Logging into wandb ********************************************************************")
     wandb.login(key = "1f3d400868fd8a06335a2177ed2ee9def37df31d")
+    print("******************************** Successful login ***********************************************************************")
     sweep_config = {
     'method': 'bayes'
     }
@@ -812,5 +828,10 @@ if __name__ == '__main__':
 
     sweep_config['parameters'] = parameters_dict
     
-    wandb.agent("qvaxxpab", entity = args.wandb_entity, project= args.wandb_project, function = main, count = 1)
+    print("******************************* Creating sweep ID *********************************************************************")
+    sweep_id = wandb.sweep(sweep = sweep_config, project=args.wandb_project)
+    print("******************************* " + str(sweep_id)+ " ******************************************************************")
+    print()
+    print()
+    wandb.agent(sweep_id, entity = args.wandb_entity, project= args.wandb_project, function = main, count = 1)
     main()
