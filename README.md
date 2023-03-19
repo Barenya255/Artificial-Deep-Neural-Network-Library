@@ -2,6 +2,7 @@
 
 # Instructions for using train.py
 
+- note: once python train.py is run from the directory, it will ask for the login key. On giving it an appropriate key, it will start the run
 - no need to import anything.
 - just add the key for user's wandb to login.
 - "python train.py" to log into wandb the values
