@@ -1036,53 +1036,12 @@ if __name__ == '__main__':
     train_y, test_y = data.getLabels()
     
     print("########################################################################################################################")
-    key = input("please enter key to log into your wandb account: ")
+    key1 = input("please enter key to log into your wandb account: ")
     
     print("************************************************************************************************************************")
     print("*                                Logging into wandb                                                                    *")
     print("************************************************************************************************************************")
-    wandb.login()
+    wandb.login(key = key1)
     print("******************************** Successful login ***********************************************************************")
-    sweep_config = {
-    'method': 'bayes'
-    }
-    metric = {
-    'name': 'valAcc',
-    'goal': 'maximize'
-    }
-
-    sweep_config['metric'] = metric
-    parameters_dict = {
-    'optimizer': {
-        'values': ['nadam', 'momentum', 'nag', 'rmsprop', 'adam', 'sgd']
-        },
-    'fc_layer_size': {
-        'values': [32, 64, 128]
-        },
-    'number_of_layers': {
-        'values' : [3,4,5]
-        },
-    'epochs':{
-        'values' : [5,10]
-        },
-    'decay' : {
-        'values' : [0 ,0.0005, 0.5]
-        },
-    'learningRate' : {
-        'values' : [1e-1, 1e-3, 1e-4]
-        },
-    'batchSize' : {
-        'values' : [16, 32, 64]
-        },
-    'initialization' : {
-        'values' : ['he', 'xavier']
-        },
-    'activation' : {
-        'values' : ['sigmoid', 'tanh', 'relu']
-        },
-    }
-
-    sweep_config['parameters'] = parameters_dict
-    
     print()
     main()
