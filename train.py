@@ -9,33 +9,39 @@ import cv2 as cv
 import wandb
 import argparse
 
+''' The following lines add the argparsing feature to take in user input.
+    all values need to be give as is, either with short hands or not.
+    The entity and project name are made to mine.
+    I have no idea what is to be done with the wandb key for login() purposes.
+'''
 
 parser = argparse.ArgumentParser(description='Training the model as per arguments passed')
 parser.add_argument('-wp', '--wandb_project', type = str, default = "cs6910.cs22m028")
-parser.add_argument('-we', '--wandb_entity', type = str, default = "")
+parser.add_argument('-we', '--wandb_entity', type = str, default = "cs22m028")
 parser.add_argument('-d', '--dataset', type = str, help = "dataset to be operated on", default = "fashion_mnist")
-parser.add_argument('-e', '--epochs',type = int, default = 1)
-parser.add_argument('-b', '--batch_size',type = int, default = 4)
+parser.add_argument('-e', '--epochs',type = int, default = 10)
+parser.add_argument('-b', '--batch_size',type = int, default = 32)
 parser.add_argument('-l', '--loss', type = str, default = "cross_entropy")
-parser.add_argument('-o', '--optimizer', type = str, default = "sgd")
-parser.add_argument('-lr', '--learning_rate', type = float, default = 0.1)
+parser.add_argument('-o', '--optimizer', type = str, default = "nadam")
+parser.add_argument('-lr', '--learning_rate', type = float, default = 1e-4)
 parser.add_argument('-m', '--momentum', type = float, default = 0.5)
-parser.add_argument('-beta1', '--beta1', type = float, default = 0.5)
-parser.add_argument('-beta2', '--beta2', type = float, default = 0.5)
+parser.add_argument('-beta1', '--beta1', type = float, default = 0.9)
+parser.add_argument('-beta2', '--beta2', type = float, default = 0.99)
 parser.add_argument('-beta', '--beta', type = float, default = 0.5)
-parser.add_argument('-eps', '--epsilon', type = float, default = 0.0000001)
-parser.add_argument('-w_d', '--weight_decay', type = float, default = 0)
-parser.add_argument('-w_i', '--weight_init', type = str, default = "random")
-parser.add_argument('-nhl', '--num_layers', type = int, default = 1)
-parser.add_argument('-sz', '--hidden_size', type = int, default = 1)
-parser.add_argument('-a', '--activation', type = str, default = "sigmoid")
+parser.add_argument('-eps', '--epsilon', type = float, default = 1e-5)
+parser.add_argument('-w_d', '--weight_decay', type = float, default = 0.0005)
+parser.add_argument('-w_i', '--weight_init', type = str, default = "xavier")
+parser.add_argument('-nhl', '--num_layers', type = int, default = 5)
+parser.add_argument('-sz', '--hidden_size', type = int, default = 128)
+parser.add_argument('-a', '--activation', type = str, default = "tanh")
 
 args = parser.parse_args()
 
+'''args contain all the arguments passed via the command line.'''
+
 def main():
     
-    wandb.init()
-    config = wandb.config
+    wandb.init(project = args.wandb_project, entity = args.wandb_entity)
     wandb.run.name = "config_"+ str(args.optimizer) + "_" + str(args.batch_size) + "_"+ str(args.learning_rate) + "_" + str(args.activation) + "_"+str(args.weight_decay) + "_" + str(args.epochs) + "_" + str(args.num_layers)+str(args.weight_init)
 
     neuralNet = FFNet(0, len(trainx[0]), 10)
@@ -59,18 +65,35 @@ def main():
 
 class PreProc:
     def __init__(self):
+        '''Class used for preprocessing all images.
+        making a constructor of this class immediately loads in desired dataset
+        
+        visualize(n) logs into wandb 10 images each belonging to a separate class.
+        
+        flattenAndCentralize() makes the mean of the image arrays 0. This helps increasing the
+        training accuracy quicker per epoch
+        
+        getLabels() return labels in corresponding index fashion
+        
+        getInputsize returns the number of images present in the training sample
+        '''
         if args.dataset == "mnist":
             print("#################################################################################################################")
-            print("###########################################loaded MNIST dataset##################################################")
+            print("#                                          loaded MNIST dataset                                                 #")
             print("#################################################################################################################")
             (self.trainx,self.trainy),(self.testx, self.testy) = mnist.load_data()
         else:
             print("#################################################################################################################")
-            print("###########################################loaded Fashion MNIST dataset##########################################")
+            print("#                                          loaded Fashion MNIST dataset                                         #")
             print("#################################################################################################################")
             (self.trainx,self.trainy),(self.testx, self.testy) = fashion_mnist.load_data()
         
     def visualize(self,n):
+        ''' args -> n :: The number of images desired to be visualized
+            returns-> null
+            
+            shows the images via matplotlib
+        '''
         for i in range(n):
             plt.subplot(330+1+i) # ask someone why??
             plt.imshow(self.trainx[i], cmap = plt.get_cmap('gray'))
@@ -78,6 +101,12 @@ class PreProc:
             
         
     def flattenAndCentralize(self):
+        ''' args -> none
+            returns -> trainx_flattened :: The training images, mean centered and flattened
+                        into a 1 dimensional array
+                    -> testx_flattened :: The testing images, mean centered and flattened
+                        into a 1 dimensional array
+        '''
         trainx_flattened = np.copy(self.trainx).astype('float64')
         testx_flattened = np.copy(self.testx).astype('float64')
         trainx_flattened -= np.mean(trainx_flattened, axis = 0)
@@ -91,6 +120,10 @@ class PreProc:
 
     
     def getLabels(self):
+        ''' args -> none
+            returns -> self.trainy :: The labels of the training data
+                    -> self.testy :: The labels of the testing data
+        '''
         return self.trainy, self.testy
     
     def getInputSize(self):
@@ -101,34 +134,60 @@ class PreProc:
 
 
 class Functions:
+    ''' The Functions class/ Library stores static methods corresponding to all the functions
+        To be used in the program/training/testing.
+        The correct implementation of these is vital to the correct working of the neural net
+        model
+    '''
     @staticmethod
     def sigmoid(input):
+        ''' args -> input :: the input value, a numpy array type to the sigmoid function
+            return -> np.array :: the np array containing calculated sigmoid values (per input[i])
+        '''
         input = np.clip(input, -100,100)
         return  1.0/(1.0+np.exp(-input))
     
     @staticmethod
     def reLU(input):
+        ''' args -> input :: the input value, a numpy array type to the reLU function
+            return -> np.array :: the np array containing calculated relu values (per input[i])
+        '''
         return np.maximum(0.01*input,input)
     
     @staticmethod
     def tanh(input):
+        ''' args -> input :: the input value, a numpy array type to the tanh function
+            return -> np.array :: the np array containing calculated tanh values (per input[i])
+        '''
         return np.tanh(input)
     
     @staticmethod
     def identity(input):
+        ''' args -> input :: the input value, a numpy array type to the identity function
+            return -> np.array :: the np array containing calculated same values (per input[i])
+        '''
         return input
     
     @staticmethod
     def mse(pred, true):
+        ''' args -> input :: the input value, a numpy array type to the softmax function
+            return -> np.array :: the np array containing calculated softmax values (per input[i])
+        '''
         return (np.linalg.norm(pred - true)**2)
         
     @staticmethod
     def softmax(input):
+        ''' args -> input :: the input value, a numpy array type to the derivative of the softmax function
+            return -> np.array :: the np array containing calculated derivative of softmax values (per input[i])
+        '''
         input = np.clip(input, -100,100)
         return np.exp(input)/(np.sum(np.exp(input)))
     
     @staticmethod
     def derivative_softmax(input):
+        ''' args -> input :: the input value, a numpy array type to the derivative of the sigmoid function
+            return -> np.array :: the np array containing calculated derivative of sigmoid values (per input[i])
+        '''
         return Functions.softmax(input)*(1-Functions.softmax(input))
     
     @staticmethod
@@ -152,19 +211,32 @@ class Functions:
     
     @staticmethod
     def derivative_tanh(input):
+        ''' args -> input :: the input value, a numpy array type to the derivative of the tanh function
+            return -> np.array :: the np array containing calculated derivative of tanh values (per input[i])
+        '''
         return (1 - (np.tanh(input)**2))
     
     @staticmethod
     def derivative_reLU(input):
+        ''' args -> input :: the input value, a numpy array type to the derivative of the reLU function
+            return -> np.array :: the np array containing calculated derivative of reLU values (per input[i])
+        '''
         return np.where(input > 0, 1, 0.01)
 
     
     @staticmethod
     def derivative_identity(input):
+        ''' args -> input :: the input value, a numpy array type to the derivative of the identity function
+            return -> np.array :: the np array containing calculated derivative of identity values (per input[i])
+        '''
         return 1
     
     @staticmethod
     def plot(input):
+        ''' args -> input :: the loss list to be plotted
+            return -> null
+            Just show the matplotlib plots for the loss
+        '''
         plt.plot(input)
         plt.xlabel("Epochs")
         plt.ylabel("Loss")
@@ -172,6 +244,10 @@ class Functions:
     
     @staticmethod
     def plotAccuract(input):
+        ''' args -> input :: the accuracy list to be plotted
+            return -> null
+            Just show the matplotlib plots for the accuracy
+        '''
         plt.plot(input)
         plt.xlabel("Epochs")
         plt.ylabel("val accuracy")
@@ -182,8 +258,22 @@ class Functions:
 
 
 class Algorithms:
+    ''' The Algorithms class/ libarary contains several functions and optimizers crucial for
+        the implementation of training and testing of the neural networks
+        
+        All these functions are static methods and therefore creation of an object instance
+        of algorithms is unnecessary
+    '''
     @staticmethod
     def uniLoss(weights, biases, activate, output, t1, t2, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> activate :: The activation Function to be used
+            args -> t1,t2 :: images and labels respectively
+            args -> lossFunc :: which loss function to be used for the purpose of evaluation
+            
+            return -> float :: the loss calculated on the given data by the model.
+        '''
         Loss = 0.0
         if lossFunc == "mse":
             for index in range(len(t1)):
@@ -201,6 +291,14 @@ class Algorithms:
     
     @staticmethod
     def ForwardProp(weights, bias, activate, output, inputLayer):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> inputLayer :: The image upon which to Forward Prop
+            
+            return -> a,h :: The preactivation and activation lists for every layer of the model.
+        '''
         L = len(weights)-1
         a = []
         h = []
@@ -214,6 +312,16 @@ class Algorithms:
         return a,h
     @staticmethod
     def BackProp(weights, biases, a, h, derivative, dataPoint, dataLabel, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            
+            return -> weights,biases :: The updated model
+        '''
         L = len(weights)-1
         if lossFunc == "mse":
             gradaL = -((Functions.onehot(dataLabel) - h[-1])*(Functions.derivative_softmax(a[-1])))
@@ -236,6 +344,20 @@ class Algorithms:
 
     @staticmethod
     def miniBatchMGD(weights, biases, batchSize, learningRate, activate, output, derivative, dataPoints, dataLabels, valTest_x, valTest_y, decay, epochs, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            args -> valTestx :: The validation image set
+            args -> valTesty :: The validation labels
+            
+            return -> weights,biases :: The updated model
+        '''
         validation = []
         validationLoss = []
         trainAccuracy = []
@@ -292,6 +414,29 @@ class Algorithms:
 
     @staticmethod
     def ADAM(weights, biases, batchSize, learningRate, activate, output, derivative, dataPoints, dataLabels, valTest_x, valTest_y, decay, epochs, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            args -> valTestx :: The validation image set
+            args -> valTesty :: The validation labels
+            args -> batchSize :: batch size
+            args -> learningRate :: the lower the better, but too low and you have no training at all.
+            args -> decay :: the amount of L2 regularization (small is good)
+            args -> epochs :: The number of epochs for which this will run
+            
+            updated ::
+            args -> beta1 :: value for momentum calculation
+            args -> beta2 :: value for velocity calculation
+            args -> epsilon :: small noise to avoid nans and other runtime errors/warnings
+            
+            return -> weights,biases :: The updated model
+        '''
         validation = []
         validationLoss = []
         trainAccuracy = []
@@ -389,6 +534,29 @@ class Algorithms:
 
     @staticmethod
     def NADAM(weights, biases, batchSize, learningRate, activate, output, derivative, dataPoints, dataLabels, valTest_x, valTest_y, decay, epochs, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            args -> valTestx :: The validation image set
+            args -> valTesty :: The validation labels
+            args -> batchSize :: batch size
+            args -> learningRate :: the lower the better, but too low and you have no training at all.
+            args -> decay :: the amount of L2 regularization (small is good)
+            args -> epochs :: The number of epochs for which this will run
+            
+            updated ::
+            args -> beta1 :: value for momentum calculation
+            args -> beta2 :: value for velocity calculation
+            args -> epsilon :: small noise to avoid nans and other runtime errors/warnings
+            
+            return -> weights,biases :: The updated model
+        '''
         patience = 3
         validation = []
         validationLoss = []
@@ -484,6 +652,23 @@ class Algorithms:
     
     @staticmethod
     def miniBatchNAG(weights, biases, batchSize, learningRate, activate, output, derivative, dataPoints, dataLabels, valTest_x, valTest_y, decay, epochs, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            args -> valTestx :: The validation image set
+            args -> valTesty :: The validation labels
+            args -> batchSize :: batch size
+            args -> learningRate :: the lower the better, but too low and you have no training at all.
+            args -> decay :: the amount of L2 regularization (small is good)
+            args -> epochs :: The number of epochs for which this will run
+            return -> weights,biases :: The updated model
+        '''
         validation = []
         validationLoss = []
         trainAccuracy = []
@@ -537,6 +722,23 @@ class Algorithms:
     
     @staticmethod
     def RMSProp(weights, biases, batchSize, learningRate, activate, output, derivative, dataPoints, dataLabels, valTest_x, valTest_y, decay, epochs, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            args -> valTestx :: The validation image set
+            args -> valTesty :: The validation labels
+            args -> batchSize :: batch size
+            args -> learningRate :: the lower the better, but too low and you have no training at all.
+            args -> decay :: the amount of L2 regularization (small is good)
+            args -> epochs :: The number of epochs for which this will run
+            return -> weights,biases :: The updated model
+        '''
         validation = []
         validationLoss = []
         trainAccuracy = []
@@ -597,6 +799,23 @@ class Algorithms:
 
     @staticmethod
     def miniBatchGD(weights, biases, batchSize, learningRate, activate, output, derivative, dataPoints, dataLabels, valTest_x, valTest_y, decay, epochs, lossFunc):
+        '''
+            args -> weights,biases :: The model on which loss is to be calculated
+            args -> a,h :: The preactivation and activation lists for every layer of the model.
+            args -> activate :: The activation Function to be used
+            args -> output :: usually the softmax function
+            args -> derivative :: the derivative of the function used in corresponding Forward Prop
+            args -> dataPoint :: The image upon which to BackwardProp
+            args -> dataLabel :: The label of the corresponding image
+            args -> lossFunc :: The loss function on which to operate on
+            args -> valTestx :: The validation image set
+            args -> valTesty :: The validation labels
+            args -> batchSize :: batch size
+            args -> learningRate :: the lower the better, but too low and you have no training at all.
+            args -> decay :: the amount of L2 regularization (small is good)
+            args -> epochs :: The number of epochs for which this will run
+            return -> weights,biases :: The updated model
+        '''
         validation = []
         validationLoss = []
         trainAccuracy = []
@@ -659,6 +878,10 @@ class Algorithms:
 #The class of FeedForwardNeuralNetwor
 
 class FFNet:
+    ''' The neural Network class/library, has functions crucial to implementing the neural Network
+        constructor initializes the network to adapt to the input layer size and also initializaes the output layer size
+        
+    '''
     #constructor
     def __init__(self,number_of_hidden_layers, number_of_inputs, number_of_outputs):
         self.number_of_inputs = number_of_inputs
@@ -671,11 +894,18 @@ class FFNet:
     
     #Method for creating layers
     def addHiddenLayer(self,number_of_neurons, initialization):
+        ''' args -> number_of_neurons :: The number of neurons to be added for this layer of the network
+            args -> initialization :: The type of initialization used
+            
+            return -> null
+        '''
         if(len(self.weights) == 0):
             temp_weights = np.random.randn(number_of_neurons, self.number_of_inputs)*0.01
             temp_biases = np.full((number_of_neurons), 0.01)
             if initialization == "xavier":
                 temp_weights = np.random.randn(number_of_neurons, self.number_of_inputs)/np.sqrt((self.number_of_inputs)/2)
+            elif initialization == "he":
+                temp_weights = np.random.randn(number_of_neurons, self.number_of_inputs)/np.sqrt((self.number_of_inputs)/6)
                 #temp_biases = np.random.randn(number_of_neurons)*np.sqrt(1/(number_of_neurons))
         else:
             prev_neurons = len(self.weights[-1])
@@ -683,30 +913,41 @@ class FFNet:
             temp_biases = np.full((number_of_neurons), 0.01)
             if initialization == "xavier":
                 temp_weights = np.random.randn(number_of_neurons, prev_neurons)/np.sqrt((prev_neurons)/2)
+            elif initialization == "he":
+                temp_weights = np.random.randn(number_of_neurons, prev_neurons)/np.sqrt((prev_neurons)/6)
                 #temp_biases = np.random.randn(number_of_neurons)*np.sqrt(1/(number_of_neurons))
 
         self.weights.append(temp_weights)
         self.biases.append(temp_biases)
     
     def addOutputLayer(self, number_of_outputs, initialization):
+        ''' To add the output layer
+            args -> number_of_outputs :: The number of neurons in the output layer of the network
+            args -> initialization :: The type of initialization used for this network layer
+        '''
         if(len(self.weights) == 0):
             #print("number of inputs: "+str(self.number_of_inputs))
             temp_weights = np.random.randn(number_of_outputs, self.number_of_inputs)*0.01
             temp_biases = np.full((number_of_outputs), 0.01)
             if initialization == "xavier":
                 temp_weights = np.random.randn(number_of_outputs, self.number_of_inputs)/np.sqrt((prev_neurons)/2)
+            elif initialization == "he":
+                temp_weights = np.random.randn(number_of_outputs, self.number_of_inputs)/np.sqrt((prev_neurons)/6)
         else:
             prev_neurons = len(self.weights[-1])
             temp_weights = np.random.randn(number_of_outputs, prev_neurons)*0.01
             temp_biases = np.full((number_of_outputs), 0.01)
             if initialization == "xavier":
                 temp_weights = np.random.randn(number_of_outputs, prev_neurons)/np.sqrt((prev_neurons)/2)
+            elif initialization == "he":
+                temp_weights = np.random.randn(number_of_outputs, prev_neurons)/np.sqrt((prev_neurons)/6)
                 
         
         self.weights.append(temp_weights)
         self.biases.append(temp_biases)
 
     def solidify(self):
+        ''' convert the entire list into a numpy array'''
         self.weights = np.array(self.weights, dtype = object)
         self.biases = np.array(self.biases, dtype = object)
 
@@ -714,16 +955,23 @@ class FFNet:
         return self.weights,self.biases
     
     def ForwardProp(self, activate, output, inputLayer):
+        ''' Forward Propagate the network on the given activation function, output function, and input layer'''
+
         return Algorithms.ForwardProp(self.network, activate, output, inputLayer)
     
     def lossCalc(self, lossFunction, Y):
+        ''' calulate the loss fucntion'''
+
         predY = self.historyA[(len(self.historyA)-1)]
         return lossFunction(Y,self.predY)
 
     def BackProp(self, a, h, dataPoint, dataLabel):
+        '''call the back propagation'''
         return Algorithms.BackProp(self.network, a, h, dataPoint, dataLabel)
     
     def fit(self, optimizer, batchSize, learningRate, activation, trainx, train_y, decay, epochs, lossFunc):
+        ''' the fit method basically trains the model for the given configuration'''
+
         
         #break data into training and validation
         indices = np.arange(len(trainx))
@@ -737,6 +985,8 @@ class FFNet:
         trainx = trainx[:int(0.9*len(trainx))]
         train_y = train_y[:int(0.9*len(train_y))]
         
+        ''' The if else block for selecting the appropriate activation'''
+
         if activation == "relu":
             activate = Functions.reLU
             derivative = Functions.derivative_reLU
@@ -755,6 +1005,8 @@ class FFNet:
             output = Functions.softmax
         
         #print(optimizer)
+        ''' The if else block for selecting the appropriate optimizer'''
+
         if optimizer == "momentum":
             self.weights, self.biases = Algorithms.miniBatchMGD(self.weights,self.biases , batchSize, learningRate, activate, output, derivative,  trainx, train_y, valTest_x, valTest_y, decay, epochs, lossFunc)
         elif optimizer == "nag":
@@ -783,9 +1035,13 @@ if __name__ == '__main__':
     testx = test_x/255.0
     train_y, test_y = data.getLabels()
     
+    print("########################################################################################################################")
+    key = input("please enter key to log into your wandb account: ")
+    
     print("************************************************************************************************************************")
-    print("******************************** Logging into wandb ********************************************************************")
-    wandb.login(key = "1f3d400868fd8a06335a2177ed2ee9def37df31d")
+    print("*                                Logging into wandb                                                                    *")
+    print("************************************************************************************************************************")
+    wandb.login()
     print("******************************** Successful login ***********************************************************************")
     sweep_config = {
     'method': 'bayes'
@@ -828,10 +1084,5 @@ if __name__ == '__main__':
 
     sweep_config['parameters'] = parameters_dict
     
-    print("******************************* Creating sweep ID *********************************************************************")
-    sweep_id = wandb.sweep(sweep = sweep_config, project=args.wandb_project)
-    print("******************************* " + str(sweep_id)+ " ******************************************************************")
     print()
-    print()
-    wandb.agent(sweep_id, entity = args.wandb_entity, project= args.wandb_project, function = main, count = 1)
     main()
